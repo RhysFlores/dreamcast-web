@@ -8,7 +8,9 @@ No games are included. Bring your own dumps. A BIOS is optional: without one, Fl
 built-in HLE BIOS is used (Sonic Adventure 2 boots to its title screen this way).
 
 **Play online:** https://rhysflores.github.io/dreamcast-web/ (pick your game, and optionally
-BIOS files; they're loaded in your browser and never uploaded).
+BIOS files; they're loaded in your browser and never uploaded). Leave "Remember this game"
+ticked and the browser keeps a private copy on that device, so later visits boot it straight
+away. Open the page with `?pick` to choose another game or forget the saved one.
 
 Works on phones and tablets too: touch devices get an on-screen Dreamcast pad (analog
 stick, D-pad, A/B/X/Y, L/R triggers, Start), and Bluetooth controllers work. Big disc

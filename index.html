@@ -22,6 +22,9 @@
   .drop input { display: none; }
   button { width: 100%; padding: 14px; border: 0; border-radius: 10px; background: var(--accent); color: #111; font-size: 16px; font-weight: 600; cursor: pointer; }
   button:disabled { opacity: .4; cursor: default; }
+  button.secondary { margin-top: 10px; background: transparent; color: var(--muted); border: 1px solid var(--line); }
+  .remember { display: flex; gap: 8px; align-items: flex-start; margin: 4px 0 14px; color: var(--muted); font-size: 14px; cursor: pointer; }
+  .remember input { margin-top: 3px; accent-color: var(--accent); }
   .err { color: #ff6b6b; margin-top: 12px; }
   table { width: 100%; border-collapse: collapse; margin-top: 28px; font-size: 14px; }
   td { padding: 4px 0; border-bottom: 1px solid var(--line); }
@@ -54,7 +57,9 @@
     <div class="files" id="bios-list"></div>
   </label>
 
+  <label class="remember"><input type="checkbox" id="remember" checked> Remember this game on this device and start it automatically next time</label>
   <button id="start" disabled>Start</button>
+  <button id="forget" class="secondary" hidden>Forget saved game</button>
   <div class="err" id="err"></div>
   <div class="note" id="note"></div>
 
@@ -162,15 +167,71 @@ function biosReady() {
 }
 
 // Auto-run: when serve.py was given a game (config.json or --game), boot it straight away.
-fetch("autorun.json").then(r => r.ok ? r.json() : null).then(auto => {
-  if (!auto || !auto.game.length) return;
-  setFiles("rom", auto.game.map(localFile));
-  if (auto.bios.length) setFiles("bios", auto.bios.map(localFile));
-  if (biosReady()) start();
-  else $("err").textContent = "The bios/ folder needs both dc_boot.bin and dc_flash.bin (or neither, to use the HLE BIOS).";
-}).catch(() => {});
+// Saved game: copies of the picked files kept in this browser's private storage (the
+// origin private file system) on this device only, so later visits boot without picking.
+// Open the page with ?pick to choose a different game instead.
+const saved = {
+  async dir(kind, create) {
+    const root = await navigator.storage.getDirectory();
+    return root.getDirectoryHandle(kind, { create });
+  },
+  supported: !!(navigator.storage && navigator.storage.getDirectory && window.FileSystemFileHandle
+    && "createWritable" in FileSystemFileHandle.prototype),
+  async load() {
+    const out = { rom: [], bios: [] };
+    for (const kind of ["rom", "bios"]) {
+      try {
+        for await (const handle of (await this.dir(kind, false)).values()) out[kind].push(await handle.getFile());
+      } catch (e) {}  // nothing saved yet
+    }
+    return out;
+  },
+  async clear() {
+    const root = await navigator.storage.getDirectory();
+    for (const kind of ["rom", "bios"]) await root.removeEntry(kind, { recursive: true }).catch(() => {});
+  },
+  async save(files) {
+    if (navigator.storage.persist) await navigator.storage.persist().catch(() => {});
+    await this.clear();
+    for (const kind of ["rom", "bios"]) {
+      const dir = await this.dir(kind, true);
+      for (const file of files[kind]) {
+        const w = await (await dir.getFileHandle(file.name, { create: true })).createWritable();
+        await w.write(file);  // streams from disk; a 1 GB+ track never sits in memory twice
+        await w.close();
+      }
+    }
+  }
+};
+if (!saved.supported) $("remember").closest("label").hidden = true;
+
+async function autoStart() {
+  // serve.py with a configured game takes priority.
+  const auto = await fetch("autorun.json").then(r => r.ok ? r.json() : null).catch(() => null);
+  if (auto && auto.game.length) {
+    setFiles("rom", auto.game.map(localFile));
+    if (auto.bios.length) setFiles("bios", auto.bios.map(localFile));
+    if (biosReady()) start();
+    else $("err").textContent = "The bios/ folder needs both dc_boot.bin and dc_flash.bin (or neither, to use the HLE BIOS).";
+    return;
+  }
+  if (!saved.supported) return;
+  const files = await saved.load();
+  if (!files.rom.length) return;
+  $("forget").hidden = false;
+  if (new URLSearchParams(location.search).has("pick")) return;
+  setFiles("rom", files.rom);
+  setFiles("bios", files.bios);
+  if (biosReady()) start({ fromSaved: true });
+}
+autoStart();
 
 $("start").addEventListener("click", () => start());
+$("forget").addEventListener("click", async () => {
+  await saved.clear();
+  $("forget").hidden = true;
+  $("note").textContent = "Saved game removed from this device.";
+});
 
 // On-screen Dreamcast pad. input_value is the RetroPad slot (see controls()): Flycast maps
 // RetroPad B/A/Y/X to Dreamcast A/B/X/Y and L2/R2 to the analog triggers.
@@ -188,7 +249,14 @@ function touchLayout() {
   ];
 }
 
-function start() {
+function start({ fromSaved = false } = {}) {
+  // Real File objects (not serve.py's) can be remembered. Copy in the background while the
+  // game loads; it reads the same files, so nothing needs to wait.
+  if (!fromSaved && saved.supported && $("remember").checked && picked.rom.every(f => f instanceof File)) {
+    saved.save({ rom: picked.rom, bios: picked.bios })
+      .then(() => console.log("[dc] saved game for next time"))
+      .catch(e => { console.warn("[dc] couldn't save game:", e); saved.clear(); });
+  }
   if (MOBILE) {
     window.DC_MOBILE = true;
     window.EJS_VirtualGamepadSettings = touchLayout();
