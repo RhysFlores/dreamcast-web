@@ -2,8 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Dreamcast Web</title>
+<!-- GitHub Pages can't send COOP/COEP headers; this service worker adds them (no-op under serve.py). -->
+<script src="coi-serviceworker.js"></script>
 <style>
   :root { --bg: #0d0f14; --panel: #161a22; --line: #2a3140; --text: #e6e9ef; --muted: #8a93a6; --accent: #f08a24; }
   * { box-sizing: border-box; }
@@ -24,14 +26,19 @@
   table { width: 100%; border-collapse: collapse; margin-top: 28px; font-size: 14px; }
   td { padding: 4px 0; border-bottom: 1px solid var(--line); }
   td:first-child { font-family: ui-monospace, monospace; color: var(--accent); width: 40%; }
-  #game-wrap { display: none; position: fixed; inset: 0; background: #000; }
+  #game-wrap { display: none; position: fixed; inset: 0; background: #000; touch-action: none; }
+  .touch-only { display: none; }
+  body.mobile .touch-only { display: table; }
+  body.mobile .keys-only { display: none; }
+  .note { color: var(--muted); margin-top: 12px; font-size: 14px; }
+  @media (max-width: 480px) { #setup { padding-top: 24px; } .drop { padding: 16px; } }
   #game { width: 100%; height: 100%; }
 </style>
 </head>
 <body>
 <div id="setup">
   <h1>Dreamcast <span>Web</span></h1>
-  <p class="sub">Flycast WASM running on EmulatorJS. Your files stay on this machine and are never uploaded anywhere.</p>
+  <p class="sub">Flycast WASM running on EmulatorJS. Your files stay on your device and are never uploaded anywhere.</p>
 
   <label class="drop" id="rom-drop">
     <strong>1. Game image</strong>
@@ -43,20 +50,28 @@
   <label class="drop" id="bios-drop">
     <strong>2. BIOS</strong>
     <small>Select both dc_boot.bin and dc_flash.bin, dumped from your own Dreamcast. This core can't boot without them.</small>
-    <input type="file" id="bios" multiple accept=".bin">
+    <input type="file" id="bios" multiple>
     <div class="files" id="bios-list"></div>
   </label>
 
   <button id="start" disabled>Start</button>
   <div class="err" id="err"></div>
+  <div class="note" id="note"></div>
 
-  <table>
+  <table class="keys-only">
     <tr><td>W A S D</td><td>Analog stick (move)</td></tr>
     <tr><td>Arrow keys</td><td>D-pad</td></tr>
     <tr><td>J / K / L / I</td><td>A / B / X / Y</td></tr>
     <tr><td>Q / E</td><td>L / R triggers (camera)</td></tr>
     <tr><td>Enter</td><td>Start</td></tr>
     <tr><td>Gamepad</td><td>Plug in and press a button; works automatically</td></tr>
+  </table>
+  <table class="touch-only">
+    <tr><td>Left side</td><td>Analog stick (bottom), D-pad (top)</td></tr>
+    <tr><td>Right side</td><td>A / B / X / Y</td></tr>
+    <tr><td>Top corners</td><td>L / R triggers</td></tr>
+    <tr><td>Bluetooth pad</td><td>Pair it with your phone; works automatically</td></tr>
+    <tr><td>Tip</td><td>Play in landscape. A single .chd file loads fastest and uses the least memory.</td></tr>
   </table>
 </div>
 
@@ -66,8 +81,14 @@
 const $ = (id) => document.getElementById(id);
 const picked = { rom: [], bios: [] };
 
+// Touch device (phone/tablet, including iPadOS which reports a desktop user agent).
+const MOBILE = (navigator.maxTouchPoints > 0 && matchMedia("(pointer: coarse)").matches)
+  || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+document.body.classList.toggle("mobile", MOBILE);
+
 if (!window.crossOriginIsolated) {
-  $("err").textContent = "Not cross-origin isolated. Start this with serve.py rather than opening the file directly.";
+  $("err").textContent = "Not cross-origin isolated yet. Reload the page once; if it persists, your browser blocked the "
+    + "service worker (e.g. private browsing). Running locally? Use serve.py instead of opening the file.";
 }
 
 // Browsers keep audio muted until the first user gesture; resume any contexts the core created.
@@ -107,6 +128,10 @@ function setFiles(kind, list) {
   picked[kind] = Array.from(list);
   $(kind + "-list").textContent = picked[kind].map(f => f.name + "  (" + (f.size / 1048576).toFixed(1) + " MB)").join("\n");
   $("start").disabled = !(picked.rom.length && biosReady());
+  const romMB = picked.rom.reduce((n, f) => n + f.size, 0) / 1048576;
+  $("note").textContent = MOBILE && romMB > 700
+    ? `This image is ${Math.round(romMB)} MB. Phones can run out of memory on images this big; a .chd version is much smaller.`
+    : "";
 }
 
 for (const kind of ["rom", "bios"]) {
@@ -146,7 +171,32 @@ fetch("autorun.json").then(r => r.ok ? r.json() : null).then(auto => {
 
 $("start").addEventListener("click", () => start());
 
+// On-screen Dreamcast pad. input_value is the RetroPad slot (see controls()): Flycast maps
+// RetroPad B/A/Y/X to Dreamcast A/B/X/Y and L2/R2 to the analog triggers.
+function touchLayout() {
+  return [
+    { type: "zone", id: "stick", location: "left", left: "50%", top: "100%", joystickInput: true, inputValues: [16, 17, 18, 19] },
+    { type: "zone", id: "dpad", location: "left", left: "50%", top: "0%", joystickInput: false, inputValues: [4, 5, 6, 7] },
+    { type: "button", text: "Y", id: "y", location: "right", left: 40, bold: true, input_value: 9 },
+    { type: "button", text: "X", id: "x", location: "right", top: 40, bold: true, input_value: 1 },
+    { type: "button", text: "B", id: "b", location: "right", left: 81, top: 40, bold: true, input_value: 8 },
+    { type: "button", text: "A", id: "a", location: "right", left: 40, top: 80, bold: true, input_value: 0 },
+    { type: "button", text: "L", id: "l", location: "top", left: 10, top: -40, bold: true, block: true, input_value: 12 },
+    { type: "button", text: "R", id: "r", location: "top", right: 70, top: -40, bold: true, block: true, input_value: 13 },
+    { type: "button", text: "Start", id: "start", location: "center", left: 30, fontSize: 15, block: true, input_value: 3 }
+  ];
+}
+
 function start() {
+  if (MOBILE) {
+    window.DC_MOBILE = true;
+    window.EJS_VirtualGamepadSettings = touchLayout();
+    // Fullscreen + landscape need the tap that started the game, so request them right away.
+    const el = document.documentElement;
+    (el.requestFullscreen ? el.requestFullscreen() : Promise.reject())
+      .then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock("landscape"))
+      .catch(() => {});
+  }
   window.DC_FILES = { rom: picked.rom, bios: picked.bios };
   const main = picked.rom.find(f => /\.(gdi|cdi|chd|cue)$/i.test(f.name)) || picked.rom[0];
 

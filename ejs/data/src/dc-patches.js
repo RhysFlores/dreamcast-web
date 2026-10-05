@@ -93,6 +93,9 @@
     EmulatorJS.prototype.downloadRom = async function() {
         const FS = this.gameManager.FS;
         const written = [];
+        // Upstream only shows the on-screen pad after a tap on its own start button, which
+        // auto-start skips. index.html sets DC_MOBILE when it detects a touch device.
+        if (window.DC_MOBILE) this.touch = true;
         for (const file of window.DC_FILES.rom) {
             this.textElem.innerText = "Reading " + file.name + "...";
             // Real File objects ignore the argument; auto-run entries use it to report progress.

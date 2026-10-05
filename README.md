@@ -6,7 +6,14 @@ WebAssembly with an SH4→WASM JIT) running inside [EmulatorJS](https://github.c
 
 No games or BIOS files are included. Bring your own dumps.
 
-## Run it
+**Play online:** https://rhysflores.github.io/dreamcast-web/ (pick your game and BIOS files;
+they're loaded in your browser and never uploaded).
+
+Works on phones and tablets too: touch devices get an on-screen Dreamcast pad (analog
+stick, D-pad, A/B/X/Y, L/R triggers, Start), and Bluetooth controllers work. Big disc
+images need a lot of memory, so on mobile a single `.chd` file works best.
+
+## Run it locally
 
 ```sh
 python3 serve.py
@@ -55,7 +62,9 @@ Gamepads work automatically. Use EmulatorJS's save states (bottom bar) to save p
     makes RetroArch shut down the video driver;
   - converts GD-ROM `.cue` sheets to `.gdi`, since this core build crashes on them.
 - `ejs/data/cores/flycast-wasm.data` – the flycast-wasm v1.0 release packaged as an EmulatorJS core.
-- `serve.py`, `index.html` – local server and launcher page.
+- `serve.py`, `index.html` – local server and launcher page (with touch controls on mobile).
+- `coi-serviceworker.js` – adds the cross-origin isolation headers on GitHub Pages, which
+  can't set headers itself ([coi-serviceworker](https://github.com/gzuidhof/coi-serviceworker), MIT).
 
 ## Licenses
 
