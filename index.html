@@ -48,8 +48,8 @@
   </label>
 
   <label class="drop" id="bios-drop">
-    <strong>2. BIOS</strong>
-    <small>Select both dc_boot.bin and dc_flash.bin, dumped from your own Dreamcast. This core can't boot without them.</small>
+    <strong>2. BIOS (optional)</strong>
+    <small>dc_boot.bin + dc_flash.bin from your own Dreamcast. Without them Flycast's built-in HLE BIOS is used, which runs most games.</small>
     <input type="file" id="bios" multiple>
     <div class="files" id="bios-list"></div>
   </label>
@@ -155,9 +155,10 @@ function controls() {
   return { 0: p1, 1: {}, 2: {}, 3: {} };
 }
 
+// A real BIOS is optional (HLE is used without one), but if one is given it needs both files.
 function biosReady() {
   const bios = picked.bios.map(f => f.name.toLowerCase());
-  return bios.includes("dc_boot.bin") && bios.includes("dc_flash.bin");
+  return !bios.length || (bios.includes("dc_boot.bin") && bios.includes("dc_flash.bin"));
 }
 
 // Auto-run: when serve.py was given a game (config.json or --game), boot it straight away.
@@ -166,7 +167,7 @@ fetch("autorun.json").then(r => r.ok ? r.json() : null).then(auto => {
   setFiles("rom", auto.game.map(localFile));
   if (auto.bios.length) setFiles("bios", auto.bios.map(localFile));
   if (biosReady()) start();
-  else $("err").textContent = "Game found on disk. Put dc_boot.bin and dc_flash.bin in the bios/ folder (or pick them above) to boot it.";
+  else $("err").textContent = "The bios/ folder needs both dc_boot.bin and dc_flash.bin (or neither, to use the HLE BIOS).";
 }).catch(() => {});
 
 $("start").addEventListener("click", () => start());
@@ -210,7 +211,6 @@ function start() {
   window.EJS_threads = false;
   window.EJS_defaultControls = controls();
   window.EJS_defaultOptions = {
-    reicast_hle_bios: "disabled",
     reicast_boot_to_bios: "disabled",
     reicast_threaded_rendering: "disabled",
     reicast_internal_resolution: "640x480",

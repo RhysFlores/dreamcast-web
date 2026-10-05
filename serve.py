@@ -126,8 +126,8 @@ url = f"http://localhost:{args.port}/"
 print(f"Dreamcast Web running at {url}  (Ctrl+C to stop)")
 if MANIFEST["game"]:
     print("Auto-run game:", ", ".join(f["name"] for f in MANIFEST["game"]))
-    if len(MANIFEST["bios"]) < 2:
-        print(f"No BIOS found in {BIOS_DIR} - put dc_boot.bin and dc_flash.bin there to boot.")
+    if not MANIFEST["bios"]:
+        print(f"No BIOS in {BIOS_DIR}; using Flycast's built-in HLE BIOS.")
 if not args.no_browser:
     webbrowser.open(url)
 http.server.ThreadingHTTPServer(("127.0.0.1", args.port), Handler).serve_forever()

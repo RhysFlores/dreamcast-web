@@ -73,8 +73,8 @@
     };
 
     // Upstream only applies defaultOptions once settings exist in localStorage, so on a
-    // first run the core would boot with stock options. Always merge them in, and keep the
-    // HLE BIOS off: in this WASM build it aborts (missing zip_source_buffer_create).
+    // first run the core would boot with stock options. Always merge them in, and use
+    // Flycast's built-in HLE BIOS unless a real dc_boot.bin was supplied.
     const origCoreSettings = EmulatorJS.prototype.getCoreSettings;
     EmulatorJS.prototype.getCoreSettings = function() {
         const set = {};
@@ -86,7 +86,8 @@
         for (const k in defaults) {
             if (!(k in set)) set[k] = `"${defaults[k]}"`;
         }
-        set.reicast_hle_bios = '"disabled"';
+        const hasBoot = window.DC_FILES.bios.some(f => f.name.toLowerCase() === "dc_boot.bin");
+        set.reicast_hle_bios = hasBoot ? '"disabled"' : '"enabled"';
         return Object.entries(set).map(([k, v]) => `${k} = ${v}`).join("\n") + "\n";
     };
 

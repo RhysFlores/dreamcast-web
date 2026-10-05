@@ -4,10 +4,11 @@ A Sega Dreamcast emulator that runs in the browser: the
 [flycast-wasm](https://github.com/nasomers/flycast-wasm) core (Flycast compiled to
 WebAssembly with an SH4→WASM JIT) running inside [EmulatorJS](https://github.com/EmulatorJS/EmulatorJS).
 
-No games or BIOS files are included. Bring your own dumps.
+No games are included. Bring your own dumps. A BIOS is optional: without one, Flycast's
+built-in HLE BIOS is used (Sonic Adventure 2 boots to its title screen this way).
 
-**Play online:** https://rhysflores.github.io/dreamcast-web/ (pick your game and BIOS files;
-they're loaded in your browser and never uploaded).
+**Play online:** https://rhysflores.github.io/dreamcast-web/ (pick your game, and optionally
+BIOS files; they're loaded in your browser and never uploaded).
 
 Works on phones and tablets too: touch devices get an on-screen Dreamcast pad (analog
 stick, D-pad, A/B/X/Y, L/R triggers, Start), and Bluetooth controllers work. Big disc
@@ -24,8 +25,8 @@ the core needs, so opening `index.html` directly won't work.
 
 You need:
 
-- **A BIOS**: `dc_boot.bin` and `dc_flash.bin` from your own Dreamcast, placed in `bios/`
-  (or picked on the page). This core build can't boot without them; its HLE BIOS aborts.
+- **Optionally, a BIOS**: `dc_boot.bin` and `dc_flash.bin` from your own Dreamcast, placed in
+  `bios/` (or picked on the page). Without them the HLE BIOS is used.
 - **A game**: `.gdi`, `.cdi`, `.chd`, or a Redump-style `.cue`/`.bin` set (converted to
   GDI on the fly), or a `.zip`/`.7z` containing one.
 
@@ -61,7 +62,11 @@ Gamepads work automatically. Use EmulatorJS's save states (bottom bar) to save p
   - absorbs a WebGL `INVALID_ENUM` from an unsupported `GL_EXTENSIONS` query that otherwise
     makes RetroArch shut down the video driver;
   - converts GD-ROM `.cue` sheets to `.gdi`, since this core build crashes on them.
-- `ejs/data/cores/flycast-wasm.data` – the flycast-wasm v1.0 release packaged as an EmulatorJS core.
+- `ejs/data/cores/flycast-wasm.data` – the flycast-wasm v1.0 release packaged as an EmulatorJS
+  core by `tools/package-core.py`. The release was linked without libzip, so the HLE BIOS
+  aborted when loading its font from the zip resources embedded in the core; the script
+  routes those calls to `tools/libzip-shim.js`, a small read-only libzip in JavaScript
+  (inflate by [tiny-inflate](https://github.com/foliojs/tiny-inflate), MIT).
 - `serve.py`, `index.html` – local server and launcher page (with touch controls on mobile).
 - `coi-serviceworker.js` – adds the cross-origin isolation headers on GitHub Pages, which
   can't set headers itself ([coi-serviceworker](https://github.com/gzuidhof/coi-serviceworker), MIT).
